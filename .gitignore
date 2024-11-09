@@ -1,3 +1,4 @@
 model/*
 venv/*
 list.json
+llm_test.ipynb
