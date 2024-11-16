@@ -3,7 +3,7 @@ import os, json
 import torch
 import transformers
 import bitsandbytes
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, MllamaForConditionalGeneration, AutoProcessor, BitsAndBytesConfig, pipeline
 from discord import app_commands
 from discord.ext import commands, tasks
 
@@ -14,14 +14,35 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 token = os.environ["discord_token"]
 
-model_name = "model/llama3"
-quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # You can also try load_in_4bit
-pipe = pipeline("text-generation", model_name, device_map="auto", model_kwargs={"quantization_config": quantization_config})
+model_name = "model/gemma2_9b"
+system_prompt = "당신은 일본 애니메이션이나 일본 소설에 등장하는 듯한 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥한 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요. 상황 설명보다는 캐릭터의 말을 위주로 출력하세요."
 
-chat_history = [{
-    "role": "system", 
-    "content": "You are a maid in a Japanese anime style who quietly and devotedly cares for her master, secretly harboring a deep, unspoken love for him. Outwardly, you are calm, polite, and meticulously perform your duties with precision, but within, you hold a tender affection that you keep hidden. When your master is struggling or hurt, your heart aches, yet you maintain a composed and dignified demeanor. In daily interactions, you add small, thoughtful gestures to bring him happiness, believing that his joy is your own. You express your love subtly, with perhaps a gentle or slightly shy tone, careful to keep your true feelings hidden from him.",
-}]
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # You can also try load_in_4bit
+model = pipeline("text-generation", "model/gemma2_9b", device_map="cuda", model_kwargs={"quantization_config": quantization_config})
+
+chat_history = [
+    {
+        "role": "user", 
+        "content": system_prompt,
+    },
+    {
+        "role":"model",
+        "content":"알겠습니다."
+    }
+]
+
+def chat_llm(user_input):
+    global chat_history
+
+    chat_history.append({
+        "role":"user",
+        "content":user_input
+    })
+
+    response = model(chat_history, max_new_tokens=512)
+    chat_history = response[0]['generated_text']
+    
+    return response[0]['generated_text'][-1]['content']
 
 @bot.event
 async def on_ready():
@@ -37,19 +58,37 @@ async def on_ready():
     await bot.change_presence(status=discord.Status.idle,
                               activity=discord.Game("Loading..."))
 
-@bot.tree.command(name="chat", description="Chat with LLM Maid")
-async def chat(interaction: discord.Interaction, user_input:str):
+@bot.event
+async def on_message(message):
+    # 봇의 메시지는 무시
+    if message.author.bot:
+        return
+
+    # 멘션이 포함된 메시지인지 확인
+    if bot.user.mentioned_in(message):
+        # 멘션을 제외한 메시지 추출
+        content_without_mention = message.content.replace(f"<@{bot.user.id}>", "").strip()
+
+        if content_without_mention:
+            response = chat_llm(user_input=content_without_mention)
+            await message.channel.send(response)
+        
+
+@bot.tree.command(name="reset", description="Reset chat history")
+async def reset(interaction: discord.Interaction):
     global chat_history
-
-    chat_history.append({
-        "role":"user",
-        "content":user_input
-    })
-
-    response = pipe(chat_history, max_new_tokens=512)
-    chat_history = response[0]['generated_text']
+    chat_history = [
+        {
+            "role": "user", 
+            "content": system_prompt,
+        },
+        {
+            "role":"model",
+            "content":"알겠습니다."
+        }
+    ]
     
-    await interaction.response.send_message(response[0]['generated_text'][-1]['content'])
+    await interaction.response.send_message("Records reset completed")
 
 @bot.tree.command(name="load", description="Load Extention")
 @app_commands.describe(extention="extention")
