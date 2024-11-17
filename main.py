@@ -179,12 +179,7 @@ async def reset(interaction: discord.Interaction):
     global model_name
     
     if model_name == "llama3.2":
-        chat_history = [
-            {
-                "role": "system", 
-                "content": llama_prompt,
-            }
-        ]
+        chat_history = []
 
     elif model_name == "gemma2":
         chat_history = [
