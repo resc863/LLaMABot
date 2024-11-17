@@ -30,6 +30,11 @@ def chat_llama(user_input, image, chat_history, model, processor):
             {"type":"text", "text":user_input}]
         }]
     else:
+        for chat in chat_history:
+            for content in chat["content"]:
+                if type(content) is not str and content["type"] == "image":
+                    chat_history = []
+
         chat_history.append({
             "role":"user",
             "content":user_input
@@ -43,7 +48,7 @@ def chat_llama(user_input, image, chat_history, model, processor):
         return_tensors="pt"
     ).to(model.device)
 
-    output = model.generate(**inputs, max_new_tokens=512)
+    output = model.generate(**inputs, max_new_tokens=256)
     chat_history.append({
         "role":"assistant",
         "content":processor.decode(output[0][len(inputs["input_ids"][0]):-1])
@@ -58,7 +63,7 @@ def chat_gemma(user_input, chat_history, model):
         "content":user_input
     })
 
-    response = model(chat_history, max_new_tokens=512)
+    response = model(chat_history, max_new_tokens=256)
     chat_history = response[0]['generated_text']
     
     return response[0]['generated_text'][-1]['content'], chat_history
@@ -160,11 +165,13 @@ async def on_message(message):
             if model_name == "llama3.2":
                 global processor
 
-                if attachment[0].content_type and "image" in attachment[0].content_type:
+                if attachment and ("image" in attachment[0].content_type):
                     # 이미지를 BytesIO로 다운로드
                     image_bytes = await attachment[0].read()
                     image = Image.open(BytesIO(image_bytes))
                     print("Image Detected")
+                else:
+                    image = None
                 
                 response, chat_history = chat_llama(content_without_mention, image, chat_history, model, processor)
                 await message.channel.send(response)
