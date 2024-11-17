@@ -48,7 +48,7 @@ def chat_llama(user_input, image, chat_history, model, processor):
         return_tensors="pt"
     ).to(model.device)
 
-    output = model.generate(**inputs, max_new_tokens=256)
+    output = model.generate(**inputs, max_new_tokens=512)
     chat_history.append({
         "role":"assistant",
         "content":processor.decode(output[0][len(inputs["input_ids"][0]):-1])
@@ -63,7 +63,7 @@ def chat_gemma(user_input, chat_history, model):
         "content":user_input
     })
 
-    response = model(chat_history, max_new_tokens=256)
+    response = model(chat_history, max_new_tokens=512)
     chat_history = response[0]['generated_text']
     
     return response[0]['generated_text'][-1]['content'], chat_history
@@ -174,11 +174,12 @@ async def on_message(message):
                     image = None
                 
                 response, chat_history = chat_llama(content_without_mention, image, chat_history, model, processor)
-                await message.channel.send(response)
 
             elif model_name == "gemma2":
                 response, chat_history = chat_gemma(content_without_mention, chat_history, model)
-                await message.channel.send(response)
+    
+        embed = discord.Embed(title="ChatBot Response", description=response)
+        await message.channel.send(embed=embed)
 
 @bot.tree.command(name="reset", description="Reset chat history")
 async def reset(interaction: discord.Interaction):
