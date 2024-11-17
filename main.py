@@ -24,11 +24,11 @@ gemma_prompt = "당신은 일본 애니메이션이나 일본 소설에 등장�
 def chat_llama(user_input, image, chat_history, model, processor):
 
     if image is not None:
-        chat_history.append({
+        chat_history = [{
             "role":"user",
             "content":[{"type": "image"},
             {"type":"text", "text":user_input}]
-        })
+        }]
     else:
         chat_history.append({
             "role":"user",
@@ -81,7 +81,7 @@ class ModelSelect(discord.ui.Select):
     def __init__(self):
         # Select 메뉴 구성
         options = [
-            discord.SelectOption(label="Llama 3", description="Load the Llama 3 model", value="llama3.2"),
+            discord.SelectOption(label="Llama 3.2", description="Load the Llama 3.2 model. Everytime you upload photo, memory will reset", value="llama3.2"),
             discord.SelectOption(label="Gemma 2", description="Load the Gemma 2 model", value="gemma2"),
         ]
         super().__init__(placeholder="Select a model...", options=options)
