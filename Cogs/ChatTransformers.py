@@ -29,8 +29,8 @@ class ChatTransformers(commands.Cog):
         }
         self.current_model = None  # 현재 선택된 모델 이름
         self.system_prompt = "당신은 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥한 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요."
-        self.chat_history = []
-        self.image = None
+        self.chat_history = [] # 채팅 내역 기억
+        self.image = None # 멀티모달 모델 전용
 
     @app_commands.command(name="select_model", description="Select Chat Model")
     async def select_model(self, interaction: discord.Interaction):
@@ -49,7 +49,7 @@ class ChatTransformers(commands.Cog):
                 model_name = self.values[0]
                 await interaction.response.defer(thinking=True)
 
-                if model_name == "llama3.2":
+                if model_name == "llama3.2": # llama 3는 한국어 성능이 빈약
                     self.parent_cog.chat_history = []
                     await interaction.followup.send(f"Progress: {model_name} is loading...", ephemeral=True)
 
@@ -69,7 +69,7 @@ class ChatTransformers(commands.Cog):
                     self.parent_cog.chat_history = [
                         {
                             "role": "user", 
-                            "content": "당신은 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥한 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요.",
+                            "content": self.parent_cog.system_prompt,
                         },
                         {
                             "role":"model",
@@ -91,7 +91,7 @@ class ChatTransformers(commands.Cog):
 
     def chat_llama(self):
         model_info = self.models[self.current_model]
-        processor = model_info["tokenizer"]
+        processor = model_info["tokenizer"] # 멀티모달 전처리
         model = model_info["model"]
         input_text = processor.apply_chat_template(self.chat_history, add_generation_prompt=True)
         inputs = processor(
@@ -102,12 +102,12 @@ class ChatTransformers(commands.Cog):
         ).to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=512)
+        response = processor.decode(output[0][len(inputs["input_ids"][0]):-1])
         self.chat_history.append({
             "role":"assistant",
-            "content":processor.decode(output[0][len(inputs["input_ids"][0]):-1])
+            "content":response
         })
-        
-        return processor.decode(output[0][len(inputs["input_ids"][0]):-1])
+        return response
 
     def chat_gemma(self):
         model_info = self.models[self.current_model]
@@ -115,8 +115,7 @@ class ChatTransformers(commands.Cog):
         model = model_info["model"]
         response = model(self.chat_history, max_new_tokens=512)
         self.chat_history = response[0]['generated_text']
-        
-        return response[0]['generated_text'][-1]['content']
+        return self.chat_history[-1]['content']
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -131,12 +130,13 @@ class ChatTransformers(commands.Cog):
             return
 
         if self.bot.user.mentioned_in(message):
-            prompt = message.content.replace(f"<@{self.bot.user.id}>", "").strip()
+            prompt = message.content.replace(f"<@{self.bot.user.id}>", "").strip() # 멘션 삭제
             print(f"User:{prompt}")
             attachment = message.attachments
 
             if not prompt:
-                await message.channel.send("질문을 입력해주세요!")
+                embed = discord.Embed(title="오류", description="메시지를 입력해주세요")
+                await message.channel.send(embed=embed)
                 return
             
             if self.current_model == "llama3.2":
