@@ -89,13 +89,13 @@ class ChatTransformers(commands.Cog):
         view.add_item(ModelSelect(self))
         await interaction.response.send_message("모델을 선택하세요:", view=view, ephemeral=True)
 
-    def chat_llama(self):
+    def chat_llama(self, image=None):
         model_info = self.models[self.current_model]
         processor = model_info["tokenizer"] # 멀티모달 전처리
         model = model_info["model"]
         input_text = processor.apply_chat_template(self.chat_history, add_generation_prompt=True)
         inputs = processor(
-            self.image,
+            image,
             input_text,
             add_special_tokens=False,
             return_tensors="pt"
@@ -143,25 +143,24 @@ class ChatTransformers(commands.Cog):
                 if attachment and ("image" in attachment[0].content_type):
                     # 이미지를 BytesIO로 다운로드
                     image_bytes = await attachment[0].read()
-                    self.image = Image.open(BytesIO(image_bytes))
+                    image = Image.open(BytesIO(image_bytes))
                     print("Image Detected")
-                    self.chat_history = [{ # Only 1 image for entire history
+                    self.chat_history.append({ # Only 1 image for entire history
                         "role":"user",
                         "content":[{"type": "image"},
                         {"type":"text", "text":prompt}]
-                    }]
+                    })
                 else:
-                    for chat in self.chat_history:
-                        for content in chat["content"]:
-                            if type(content) is not str and content["type"] == "image":
-                                self.chat_history = []
-                                
                     self.chat_history.append({
                         "role":"user",
                         "content":prompt
                     })
+                response = self.chat_llama(image)
 
-                response = self.chat_llama()
+                for content in self.chat_history[-1]:
+                    if type(content) is not str and content["type"] == "image":
+                        self.chat_history[-1]["content"].remove({"type": "image"})
+                
 
             elif self.current_model == "gemma2":
                 self.chat_history.append({
