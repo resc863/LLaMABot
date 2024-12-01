@@ -12,12 +12,12 @@ class ChatCog(commands.Cog):
         self.bot = bot
         self.ollama_url = "http://localhost:11434/api/chat"
         self.selected_model = "gemma2"  # 기본값
-        self.system_prompt = "당신은 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥한 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요."
+        self.system_prompt = "당신은 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥하며 귀여운 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요."
         self.messages = [
             {"role": "system", "content": self.system_prompt}
         ]
 
-    def query_ollama(self, prompt, model, image=None):
+    def query_ollama(self, prompt, model, image=None): # Ollama 설치 필수
         """
         Ollama API에 요청을 보내는 함수.
         """
