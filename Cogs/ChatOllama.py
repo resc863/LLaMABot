@@ -68,6 +68,9 @@ class ChatCog(commands.Cog):
 
             async def callback(self, interaction: discord.Interaction):
                 self.parent_cog.selected_model = self.values[0]
+                self.messages = [
+                    {"role": "system", "content": self.system_prompt}
+                ]
                 await interaction.response.send_message(f"모델이 `{self.values[0]}`로 설정되었습니다.", ephemeral=True)
 
         view = discord.ui.View()
