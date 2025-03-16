@@ -100,13 +100,13 @@ class ChatCog(commands.Cog):
                 await message.channel.send(embed=embed)
                 return
             
-            if self.selected_model == "llama3.2-vision":
-                if attachment and ("image" in attachment[0].content_type):
-                    # 이미지를 BytesIO로 다운로드
-                    image_bytes = await attachment[0].read()
-                    image = base64.b64encode(image_bytes).decode('utf-8')
-                    print("Image Detected")
+            if attachment and ("image" in attachment[0].content_type):
+                # 이미지를 BytesIO로 다운로드
+                image_bytes = await attachment[0].read()
+                image = base64.b64encode(image_bytes).decode('utf-8')
+                print("Image Detected")
 
+            if self.selected_model == "llama3.2-vision":
                 response = self.query_ollama(prompt, self.selected_model, image)
 
             elif self.selected_model == "gemma3":
