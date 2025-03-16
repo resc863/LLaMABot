@@ -57,7 +57,7 @@ class ChatCog(commands.Cog):
         모델을 선택하기 위한 슬래시 커맨드.
         """
         options = [
-            discord.SelectOption(label="Gemma 2", description="Gemma 2 모델 사용", value="gemma2"),
+            discord.SelectOption(label="Gemma 3", description="Gemma 3 모델 사용", value="gemma3"),
             discord.SelectOption(label="Llama 3.2", description="Llama 3.2 모델 사용", value="llama3.2-vision")
         ]
 
@@ -109,8 +109,8 @@ class ChatCog(commands.Cog):
 
                 response = self.query_ollama(prompt, self.selected_model, image)
 
-            elif self.selected_model == "gemma2":
-                response = self.query_ollama(prompt, self.selected_model)
+            elif self.selected_model == "gemma3":
+                response = self.query_ollama(prompt, self.selected_model+":12b", image)
 
             print(f"Bot:{response}")
             embed = discord.Embed(title="ChatBot Response", description=response)
