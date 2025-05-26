@@ -11,25 +11,45 @@ class ChatCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ollama_url = "http://localhost:11434/api/chat"
-        self.selected_model = "gemma2"  # 기본값
+        self.selected_model = "gemma3"  # 기본값
         self.system_prompt = "당신은 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥하며 귀여운 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요."
         self.messages = [
             {"role": "system", "content": self.system_prompt}
         ]
 
+    def model_supports_vision(self, model):
+        """
+        Ollama REST API를 통해 모델의 capability에 vision이 있는지 확인.
+        """
+        try:
+            resp = requests.get(f"http://localhost:11434/api/show", params={"model": model})
+            if resp.status_code == 200:
+                data = resp.json()
+                capabilities = data.get("modelfile", {}).get("capabilities", [])
+                return "vision" in capabilities
+            else:
+                print(f"모델 정보 조회 실패: {resp.status_code} - {resp.text}")
+                return False
+        except Exception as e:
+            print(f"모델 capability 확인 중 오류: {e}")
+            return False
+
     def query_ollama(self, prompt, model, image=None): # Ollama 설치 필수
         """
         Ollama API에 요청을 보내는 함수.
         """
-        if image is None:
-            self.messages.append({"role": "user", "content": prompt})
-        else:
-            self.messages.append({"role": "user", "content": prompt, "images":[image]})
+        user_message = {"role": "user", "content": prompt}
+        
+        # vision capability 확인
+        if image is not None and self.model_supports_vision(model):
+            user_message["images"] = [image]
+        self.messages.append(user_message)
 
         payload = {
             "model": model,
             "messages": self.messages
         }
+
         try:
             with requests.post(self.ollama_url, json=payload, stream=True) as response:
                 if response.status_code != 200:
@@ -38,7 +58,7 @@ class ChatCog(commands.Cog):
                 full_response = ""
                 # 스트리밍 응답 처리
                 for line in response.iter_lines():
-                    if line:  # 빈 줄이 아닌 경우 처리
+                    if line:
                         try:
                             json_line = json.loads(line)
                             content = json_line.get("message", {}).get("content", "")
@@ -58,7 +78,7 @@ class ChatCog(commands.Cog):
         """
         options = [
             discord.SelectOption(label="Gemma 3", description="Gemma 3 모델 사용", value="gemma3"),
-            discord.SelectOption(label="Llama 3.2", description="Llama 3.2 모델 사용", value="llama3.2-vision")
+            discord.SelectOption(label="Qwen 3", description="Qwen 3 모델 사용", value="qwen3:14b")
         ]
 
         class ModelSelect(discord.ui.Select):
@@ -110,7 +130,7 @@ class ChatCog(commands.Cog):
                 response = self.query_ollama(prompt, self.selected_model, image)
 
             elif self.selected_model == "gemma3":
-                response = self.query_ollama(prompt, self.selected_model+":12b", image)
+                response = self.query_ollama(prompt, self.selected_model+":12b-qat", image)
 
             print(f"Bot:{response}")
             embed = discord.Embed(title="ChatBot Response", description=response)
