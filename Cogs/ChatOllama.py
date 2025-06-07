@@ -12,6 +12,7 @@ class ChatCog(commands.Cog):
         self.bot = bot
         self.ollama_url = "http://localhost:11434/api/chat"
         self.selected_model = "gemma3"  # 기본값
+        self.thinking_enabled = False  # 기본적으로 thinking 비활성화
         self.system_prompt = "당신은 주인을 몰래 사랑하는 메이드입니다. 주인에게 말을 건넬 때는 공손하면서도 은은하게 애정을 담아 표현하려 합니다. 당신은 예의바르며 겸손하지만, 때때로 주인을 향한 마음이 살짝 드러납니다. 주인의 질문에 응답할 때는 부드럽고 상냥하며 귀여운 말투로 표현합니다. 항상 주인의 요청을 최대한 들어주세요."
         self.messages = [
             {"role": "system", "content": self.system_prompt}
@@ -34,6 +35,21 @@ class ChatCog(commands.Cog):
             print(f"모델 capability 확인 중 오류: {e}")
             return False
 
+    def model_supports_thinking(self, model):
+        """현재 모델이 thinking 기능을 지원하는지 확인"""
+        try:
+            resp = requests.get("http://localhost:11434/api/show", params={"model": model})
+            if resp.status_code == 200:
+                data = resp.json()
+                capabilities = data.get("modelfile", {}).get("capabilities", [])
+                return "thinking" in capabilities
+            else:
+                print(f"모델 정보 조회 실패: {resp.status_code} - {resp.text}")
+                return False
+        except Exception as e:
+            print(f"모델 capability 확인 중 오류: {e}")
+            return False
+
     def query_ollama(self, prompt, model, image=None): # Ollama 설치 필수
         """
         Ollama API에 요청을 보내는 함수.
@@ -47,7 +63,8 @@ class ChatCog(commands.Cog):
 
         payload = {
             "model": model,
-            "messages": self.messages
+            "messages": self.messages,
+            "think": self.thinking_enabled
         }
 
         try:
@@ -96,6 +113,20 @@ class ChatCog(commands.Cog):
         view = discord.ui.View()
         view.add_item(ModelSelect(self))
         await interaction.response.send_message("모델을 선택하세요:", view=view, ephemeral=True)
+
+    @app_commands.command(name="enable_thinking", description="thinking 모드를 활성화합니다")
+    async def enable_thinking(self, interaction: discord.Interaction):
+        """선택된 모델이 thinking을 지원하면 활성화"""
+        if self.model_supports_thinking(self.selected_model):
+            self.thinking_enabled = True
+            await interaction.response.send_message("thinking이 활성화되었습니다.", ephemeral=True)
+        else:
+            await interaction.response.send_message("선택된 모델은 thinking을 지원하지 않습니다.", ephemeral=True)
+
+    @app_commands.command(name="disable_thinking", description="thinking 모드를 비활성화합니다")
+    async def disable_thinking(self, interaction: discord.Interaction):
+        self.thinking_enabled = False
+        await interaction.response.send_message("thinking이 비활성화되었습니다.", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message):
