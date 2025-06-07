@@ -50,8 +50,12 @@ async def load(interaction: discord.Interaction, extention:str):
 async def unload(interaction: discord.Interaction, extention:str):
     """Command which Unloads a Module."""
 
-    if not bot.is_owner(interaction.user):
-        ans = discord.Embed(title="Access Denied", description="You don't have permission for it.", color=0xcceeff)
+    if not (await bot.is_owner(interaction.user)):
+        ans = discord.Embed(
+            title="Access Denied",
+            description="You don't have permission for it.",
+            color=0xcceeff,
+        )
         await interaction.response.send_message(embed=ans)
         return
 
