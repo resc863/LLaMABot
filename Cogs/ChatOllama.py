@@ -63,9 +63,10 @@ class ChatCog(commands.Cog):
                             json_line = json.loads(line)
                             content = json_line.get("message", {}).get("content", "")
                             full_response += content
-                            self.messages.append({"role": "assistant", "content": full_response})
                         except json.JSONDecodeError:
                             print("Invalid JSON line:", line)
+
+                self.messages.append({"role": "assistant", "content": full_response})
 
             return full_response
         except requests.exceptions.RequestException as e:
@@ -88,10 +89,13 @@ class ChatCog(commands.Cog):
 
             async def callback(self, interaction: discord.Interaction):
                 self.parent_cog.selected_model = self.values[0]
-                self.messages = [
+                # reset conversation history when model changes
+                self.parent_cog.messages = [
                     {"role": "system", "content": self.parent_cog.system_prompt}
                 ]
-                await interaction.response.send_message(f"모델이 `{self.values[0]}`로 설정되었습니다.", ephemeral=True)
+                await interaction.response.send_message(
+                    f"모델이 `{self.values[0]}`로 설정되었습니다.", ephemeral=True
+                )
 
         view = discord.ui.View()
         view.add_item(ModelSelect(self))
