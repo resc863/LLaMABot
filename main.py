@@ -13,8 +13,6 @@ token = os.environ["discord_token"]
 @bot.event
 async def on_ready():
     print("Logged in ")
-    print(bot.user.name)
-    print(bot.user.id)
     print("===============\n")
 
     await bot.tree.sync()
@@ -68,32 +66,5 @@ async def unload(interaction: discord.Interaction, extention:str):
         await interaction.followup.send('**`SUCCESS`**', ephemeral=True)
 
     await bot.tree.sync()
-
-@bot.event
-async def on_member_join(member):
-    await member.create_dm()
-    await member.dm_channel.send("반갑습니다 " + member.guild.name + "에 오신것을 환영합니다")
-
-@bot.event
-async def on_raw_reaction_add(payload):
-    message = await bot.get_channel(payload.channel_id
-                                    ).fetch_message(payload.message_id)
-    user = payload.member
-    print(payload.emoji)
-    print(message.channel.id)
-    print(user)
-
-
-@bot.event
-async def on_raw_reaction_remove(payload):
-    channel = await bot.fetch_channel(payload.channel_id)
-    guild = channel.guild
-
-    user = await guild.fetch_member(payload.user_id)
-    print(channel.id)
-    message = await channel.fetch_message(payload.message_id)
-    print(payload.emoji)
-    print(guild.system_channel)
-
 
 bot.run(token)
