@@ -149,6 +149,7 @@ class ChatCog(commands.Cog):
             print(f"User:{prompt}")
             attachment = message.attachments
             image = None
+            response = None
 
             if not prompt:
                 embed = discord.Embed(title="오류", description="메시지를 입력해주세요")
@@ -167,9 +168,10 @@ class ChatCog(commands.Cog):
             elif self.selected_model == "gemma3":
                 response = self.query_ollama(prompt, self.selected_model+":12b-qat", image)
 
-            print(f"Bot:{response}")
-            embed = discord.Embed(title="ChatBot Response", description=response)
-            await message.channel.send(embed=embed)
+            if response is not None:
+                print(f"Bot:{response}")
+                embed = discord.Embed(title="ChatBot Response", description=response)
+                await message.channel.send(embed=embed)
 
             if "images" in self.messages[-1]:
                 self.messages[-1].pop("images")
