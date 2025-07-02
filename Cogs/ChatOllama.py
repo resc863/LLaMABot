@@ -1,6 +1,6 @@
 import discord
 import asyncio
-import requests
+import aiohttp
 import os, json, base64
 from PIL import Image
 from io import BytesIO
@@ -10,6 +10,7 @@ from discord.ext import commands, tasks
 class ChatCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.session = aiohttp.ClientSession()
         self.ollama_base_url = "http://localhost:11434/api"
         # 페르소나 (시스템 프롬프트) 프리셋 사전
         self.personas = {
@@ -22,6 +23,9 @@ class ChatCog(commands.Cog):
         self.default_persona_key = "maid"
         self.user_states = {}  # 사용자별 상태 저장
 
+    async def cog_unload(self):
+        await self.session.close()
+
     def get_user_state(self, user_id):
         if user_id not in self.user_states:
             default_persona = self.personas[self.default_persona_key]
@@ -32,69 +36,66 @@ class ChatCog(commands.Cog):
                 "messages": [{"role": "system", "content": default_persona}],
             }
         return self.user_states[user_id]
-
-    def _get_model_capabilities(self, model: str) -> list:
+    
+    async def _get_local_models(self) -> list:
         """
-        Ollama REST API를 통해 모델의 capabilities를 가져오는 헬퍼 함수.
-        """
-        try:
-            show_url = f"{self.ollama_base_url}/show"
-            resp = requests.post(show_url, json={"name": model})
-            resp.raise_for_status() # 4xx, 5xx 응답에 대해 HTTPError 발생
-            data = resp.json()
-            #print(f"모델 {model} 정보: {data}")
-            return data.get("capabilities", [])
-        except requests.exceptions.ConnectionError:
-            print(f"모델 정보 조회 실패: Ollama 서버에 연결할 수 없습니다.")
-            return []
-        except requests.exceptions.RequestException as e:
-            # HTTPError 등 다른 요청 관련 예외 처리
-            print(f"모델 정보 조회 실패: {e}")
-            return []
-        except json.JSONDecodeError as e:
-            print(f"모델 정보 응답(JSON) 파싱 오류: {e}")
-            return []
-
-    def _get_local_models(self) -> list:
-        """
-        Ollama REST API를 통해 로컬에 설치된 모델 목록을 가져오는 헬퍼 함수.
+        Ollama REST API를 통해 로컬에 설치된 모델 목록을 가져오는 비동기 헬퍼 함수.
         """
         try:
             tags_url = f"{self.ollama_base_url}/tags"
-            resp = requests.get(tags_url)
-            resp.raise_for_status()
-            data = resp.json()
-            # 'models' 키에서 각 모델의 'name'을 추출하여 리스트로 반환
-            return [model['name'] for model in data.get('models', [])]
-        except requests.exceptions.ConnectionError:
+            async with self.session.get(tags_url) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    models = [model.get('name') for model in data.get('models', [])]
+                    return [name for name in models if name]
+        except aiohttp.ClientConnectionError:
             print(f"모델 목록 조회 실패: Ollama 서버에 연결할 수 없습니다.")
             return []
-        except requests.exceptions.RequestException as e:
+        except aiohttp.ClientError as e:
             print(f"모델 목록 조회 실패: {e}")
             return []
         except (json.JSONDecodeError, KeyError) as e:
             print(f"모델 목록 응답(JSON) 파싱 오류: {e}")
             return []
 
-    def model_supports_vision(self, model):
+    async def _get_model_capabilities(self, model: str) -> list:
+        """
+        Ollama REST API를 통해 모델의 capabilities를 가져오는 비동기 헬퍼 함수.
+        """
+        try:
+            show_url = f"{self.ollama_base_url}/show"
+            async with self.session.post(show_url, json={"name": model}) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    return data.get("capabilities", [])
+        except aiohttp.ClientConnectionError:
+            print(f"모델 정보 조회 실패: Ollama 서버에 연결할 수 없습니다.")
+            return []
+        except aiohttp.ClientError as e:
+            print(f"모델 정보 조회 실패: {e}")
+            return []
+        except json.JSONDecodeError as e:
+            print(f"모델 정보 응답(JSON) 파싱 오류: {e}")
+            return []
+
+    async def model_supports_vision(self, model):
         """
         Ollama REST API를 통해 모델의 capability에 vision이 있는지 확인.
         """
-        return "vision" in self._get_model_capabilities(model)
+        return "vision" in await self._get_model_capabilities(model)
 
-    def model_supports_thinking(self, model):
+    async def model_supports_thinking(self, model):
         """현재 모델이 thinking 기능을 지원하는지 확인"""
-        return "thinking" in self._get_model_capabilities(model)
+        return "thinking" in await self._get_model_capabilities(model)
 
-    # 수정: thinking_enabled를 인자로 받고, 사용자 대화 기록(messages)을 이용
-    def query_ollama(self, prompt, model, messages, thinking_enabled, image=None):
+    async def query_ollama(self, prompt, model, messages, thinking_enabled, image=None):
         """
         Ollama API에 요청을 보내는 함수.
         """
         user_message = {"role": "user", "content": prompt}
         
         # vision capability 확인
-        if image is not None and self.model_supports_vision(model):
+        if image is not None and await self.model_supports_vision(model):
             print("Vision capability detected, adding image to request.")
             user_message["images"] = [image]
         messages.append(user_message)
@@ -105,36 +106,36 @@ class ChatCog(commands.Cog):
         }
         
         # 모델이 thinking을 지원하는 경우, 활성화 여부에 따라 think 파라미터를 명시적으로 설정합니다.
-        if self.model_supports_thinking(model):
+        if await self.model_supports_thinking(model):
             payload["think"] = thinking_enabled
             if thinking_enabled:
                 print("Thinking mode enabled, adding 'think: true' to payload.")
             else:
                 print("Thinking mode disabled, adding 'think: false' to payload.")
 
+        chat_url = f"{self.ollama_base_url}/chat"
+        full_response = ""
         try:
-            chat_url = f"{self.ollama_base_url}/chat"
-            with requests.post(chat_url, json=payload, stream=True) as response:
-                response.raise_for_status() # 4xx, 5xx 응답에 대해 HTTPError 발생
-                
-                full_response = ""
-                # 스트리밍 응답 처리
-                for line in response.iter_lines():
-                    if line:
-                        try:
-                            json_line = json.loads(line)
-                            content = json_line.get("message", {}).get("content", "")
-                            full_response += content
-                        except json.JSONDecodeError:
-                            print("Invalid JSON line:", line)
-
-                messages.append({"role": "assistant", "content": full_response})
-
+            async with self.session.post(chat_url, json=payload) as response:
+                    response.raise_for_status()
+                    while True:
+                        line = await response.content.readline()
+                        if not line:
+                            break
+                        line = line.strip()
+                        if line:
+                            try:
+                                json_line = json.loads(line.decode('utf-8'))
+                                content = json_line.get("message", {}).get("content", "")
+                                full_response += content
+                            except json.JSONDecodeError:
+                                print("Invalid JSON line:", line)
+            messages.append({"role": "assistant", "content": full_response})
             return full_response
-        except requests.exceptions.ConnectionError:
+        except aiohttp.ClientConnectionError:
             messages.pop()
             return "Ollama 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."
-        except requests.exceptions.RequestException as e:
+        except aiohttp.ClientError as e:
             messages.pop()
             return f"Ollama API 요청 중 오류가 발생했습니다: {e}"
 
@@ -146,7 +147,7 @@ class ChatCog(commands.Cog):
         # API 호출이 있을 수 있으므로 응답을 지연시킵니다.
         await interaction.response.defer(ephemeral=True)
 
-        local_models = self._get_local_models()
+        local_models = await self._get_local_models()  # await로 변경
 
         if not local_models:
             await interaction.followup.send(
@@ -175,7 +176,7 @@ class ChatCog(commands.Cog):
                 # 모델 변경 시 대화 기록을 초기화합니다.
                 state["messages"] = [{"role": "system", "content": self.parent_cog.personas[state["persona_key"]]}]
                 # 새로 선택된 모델이 'thinking'을 지원하지 않으면, 해당 기능을 비활성화합니다.
-                if not self.parent_cog.model_supports_thinking(selected_model):
+                if not await self.parent_cog.model_supports_thinking(selected_model):
                     state["thinking_enabled"] = False
                 await interaction.response.send_message(
                     f"모델이 `{selected_model}`로 설정되었습니다.", ephemeral=True
@@ -188,7 +189,7 @@ class ChatCog(commands.Cog):
     @app_commands.command(name="enable_thinking", description="thinking 모드를 활성화합니다")
     async def enable_thinking(self, interaction: discord.Interaction):
         state = self.get_user_state(interaction.user.id)
-        if self.model_supports_thinking(state["selected_model"]):
+        if await self.model_supports_thinking(state["selected_model"]):
             state["thinking_enabled"] = True
             await interaction.response.send_message("thinking이 활성화되었습니다.", ephemeral=True)
         else:
@@ -260,18 +261,29 @@ class ChatCog(commands.Cog):
                 await message.channel.send(embed=embed)
                 return
             
-            if attachment and ("image" in attachment[0].content_type):
-                # 이미지를 BytesIO로 다운로드
-                image_bytes = await attachment[0].read()
-                image = base64.b64encode(image_bytes).decode('utf-8')
-                print("Image Detected")
+            try:
+                if attachment and ("image" in attachment[0].content_type):
+                    # 이미지를 BytesIO로 다운로드
+                    image_bytes = await attachment[0].read()
+                    image = base64.b64encode(image_bytes).decode('utf-8')
+                    print("Image Detected")
+            except discord.HTTPException as e:
+                print(f"첨부파일 다운로드 실패: {e}")
+                await message.channel.send("첨부파일을 처리하는 중 오류가 발생했습니다.")
+                return
 
             # 사용자 상태에서 전체 모델 이름을 가져와 API에 전달
-            response = self.query_ollama(prompt, state["selected_model"], state["messages"], state["thinking_enabled"], image)
+            response = await self.query_ollama(prompt, state["selected_model"], state["messages"], state["thinking_enabled"], image)
             if response is not None:
                 print(f"Bot:{response}")
-                embed = discord.Embed(title="ChatBot Response", description=response)
-                await message.channel.send(embed=embed)
+                persona_key = state.get("persona_key", self.default_persona_key)
+                embed = discord.Embed(title=persona_key.capitalize(), description=response)
+                try:
+                    await message.channel.send(embed=embed)
+                except discord.Forbidden:
+                    print(f"메시지 전송 실패: 채널({message.channel.id})에 메시지를 보낼 권한이 없습니다.")
+                except discord.HTTPException as e:
+                    print(f"메시지 전송 실패: {e}")
 
 
 async def setup(bot):
